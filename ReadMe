@@ -1,0 +1,42 @@
+# VenusOS-Tailscale
+
+Installs [Tailscale](https://tailscale.com) VPN on Venus OS, enabling SSH access from anywhere — even behind 4G CGNAT (Bouygues, SFR, etc.).
+
+## Requirements
+
+- Venus OS v3.50 or later
+- SetupHelper (PackageManager) installed
+- Internet access on the RPi at install time (to download Tailscale binary)
+- A free Tailscale account: https://tailscale.com
+
+## Installation via PackageManager
+
+1. In Venus OS PackageManager, add package: `florent1080/VenusOS-Tailscale`
+2. Install the package
+3. Edit `/data/tailscale/tailscale.conf`:
+   - Go to https://login.tailscale.com/admin/settings/keys
+   - Create a key: **Reusable** + **No expiry**
+   - Paste the key as `AUTHKEY=tskey-auth-...`
+   - Set `HOSTNAME=venus-van` (or any name you want)
+4. Run: `/data/VenusOS-Tailscale/tailscale_connect.sh`
+   - Or simply reboot — the service will authenticate automatically
+
+## After install
+
+- SSH from anywhere: `ssh root@venus-van` (or use the `100.x.x.x` Tailscale IP)
+- Check status: `tailscale status`
+- View in Tailscale admin: https://login.tailscale.com/admin/machines
+
+## Files
+
+- `/data/tailscale/tailscale.conf` — configuration (AUTHKEY, HOSTNAME)
+- `/data/tailscale/bin/` — tailscale + tailscaled binaries (auto-downloaded)
+- `/data/tailscale/state/` — Tailscale state (auth token, etc.)
+- `/service/tailscaled/` — runit service (auto-started at boot)
+
+## Notes
+
+- The Tailscale binary is downloaded at install time from pkgs.tailscale.com
+- Supports RPi3 (ARMv7) and RPi5 (ARM64) — detected automatically
+- Config is preserved on uninstall/upgrade
+- Works behind CGNAT (no port forwarding needed)

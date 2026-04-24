@@ -1,0 +1,6 @@
+v1.0
+- Initial release
+- Tailscale VPN for Venus OS (RPi3 ARMv7 / RPi5 ARM64)
+- Auto-detects architecture and downloads latest stable Tailscale binary
+- runit service for tailscaled daemon
+- Auth key + hostname configurable via /data/tailscale/tailscale.conf

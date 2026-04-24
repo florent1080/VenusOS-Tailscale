@@ -1,0 +1,2 @@
+#!/bin/sh
+exec multilog s25000 n4 /var/log/tailscaled

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Called by runit when tailscaled exits (including on first start and restart)
+# $1 = exit code, $2 = signal
+
+exec 2>&1
+
+# Only try to connect if tailscaled exited cleanly (restart scenario)
+# On first start, the service starts and this finish is NOT called
+# We use a flag file to trigger tailscale up after successful start
+exit 0

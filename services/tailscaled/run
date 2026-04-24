@@ -1,0 +1,39 @@
+#!/bin/sh
+exec 2>&1
+
+CONF=/data/tailscale/tailscale.conf
+TAILSCALED=/data/tailscale/bin/tailscaled
+TAILSCALE=/data/tailscale/bin/tailscale
+STATE=/data/tailscale/state
+
+# Ensure state directory exists
+mkdir -p "$STATE"
+
+# Start tailscaled in background so we can run tailscale up after
+"$TAILSCALED" \
+    --state="$STATE/tailscaled.state" \
+    --statedir="$STATE" &
+DAEMON_PID=$!
+
+# Wait for tailscaled socket to be ready (up to 15s)
+i=0
+while [ $i -lt 15 ]; do
+    "$TAILSCALE" status >/dev/null 2>&1 && break
+    sleep 1
+    i=$((i + 1))
+done
+
+# Authenticate / reconnect
+AUTHKEY=$(grep '^AUTHKEY=' "$CONF" 2>/dev/null | cut -d= -f2- | tr -d ' \r\n')
+HOSTNAME=$(grep '^HOSTNAME=' "$CONF" 2>/dev/null | cut -d= -f2- | tr -d ' \r\n')
+HOSTNAME="${HOSTNAME:-venus-van}"
+
+if [ -n "$AUTHKEY" ]; then
+    "$TAILSCALE" up --authkey="$AUTHKEY" --hostname="$HOSTNAME" --accept-routes 2>&1
+else
+    # No authkey — reconnect with existing state (works after first auth)
+    "$TAILSCALE" up --hostname="$HOSTNAME" --accept-routes 2>&1
+fi
+
+# Keep runit happy by waiting on tailscaled
+wait $DAEMON_PID
