@@ -19,6 +19,143 @@ CONF_DST="$INSTALL_DIR/tailscale.conf"
 source "/data/SetupHelper/HelperResources/IncludeHelpers"
 #### end of lines to include helper resources
 
+# Disable exit-on-error — SetupHelper may set it, we handle errors manually
+set +e
+
+#### running manually and target just install or uninstall
+if [ $scriptAction == 'NONE' ] ; then
+    echo
+    echo "This package installs Tailscale VPN on Venus OS"
+    echo "Edit /data/tailscale/tailscale.conf to set your AUTHKEY before installing"
+    echo
+    scriptAction=$(promptForAction)
+fi
+
+# ─── helpers ────────────────────────────────────────────────────────────────
+
+detect_arch() {
+    local machine
+    machine="$(uname -m)"
+    case "$machine" in
+        armv7*|armv6*) echo "arm" ;;
+        aarch64)       echo "arm64" ;;
+        *)             echo "arm" ;;
+    esac
+}
+
+get_tailscale_version() {
+    # Try to get latest version using grep/awk (no python3 dependency)
+    local version
+    version=$(curl -sf --max-time 10 "https://pkgs.tailscale.com/stable/?mode=json" \
+        | grep -o '"Version":"[^"]*"' | head -1 | cut -d'"' -f4 | tr -d 'v') 2>/dev/null || true
+    if [ -z "$version" ]; then
+        # Known good fallback version
+        version="1.78.3"
+        logMessage "version detection failed, using fallback $version"
+    else
+        logMessage "detected Tailscale version: $version"
+    fi
+    echo "$version"
+}
+
+download_tailscale() {
+    local arch="$1"
+    local tmpdir="/tmp/tailscale_install"
+    rm -rf "$tmpdir"
+    mkdir -p "$tmpdir"
+
+    local version
+    version=$(get_tailscale_version)
+
+    local tarball="tailscale_${version}_${arch}.tgz"
+    local url="https://pkgs.tailscale.com/stable/${tarball}"
+
+    logMessage "downloading Tailscale $version for $arch ..."
+    logMessage "URL: $url"
+    curl -fL --max-time 120 "$url" -o "$tmpdir/$tarball"
+    local curl_rc=$?
+    if [ $curl_rc -ne 0 ]; then
+        logMessage "ERROR: curl failed (rc=$curl_rc) for $url"
+        return 1
+    fi
+
+    logMessage "extracting binaries..."
+    tar xzf "$tmpdir/$tarball" -C "$tmpdir"
+    local tar_rc=$?
+    if [ $tar_rc -ne 0 ]; then
+        logMessage "ERROR: tar extraction failed (rc=$tar_rc)"
+        return 1
+    fi
+
+    # Find extracted directory (tailscale_VERSION_ARCH/)
+    local extracted_dir
+    extracted_dir=$(ls -d "$tmpdir"/tailscale_*/ 2>/dev/null | head -1)
+    if [ -z "$extracted_dir" ] || [ ! -d "$extracted_dir" ]; then
+        logMessage "ERROR: could not find extracted directory in $tmpdir"
+        ls -la "$tmpdir" | while read line; do logMessage "  $line"; done
+        return 1
+    fi
+
+    mkdir -p "$BIN_DIR"
+    cp "$extracted_dir/tailscale"  "$BIN_DIR/tailscale"
+    cp "$extracted_dir/tailscaled" "$BIN_DIR/tailscaled"
+    chmod +x "$BIN_DIR/tailscale" "$BIN_DIR/tailscaled"
+
+    rm -rf "$tmpdir"
+    logMessage "Tailscale binaries installed to $BIN_DIR"
+    return 0
+}
+
+# ─── INSTALL ─────────────────────────────────────────────────────────────────
+
+if [ $scriptAction == 'INSTALL' ] ; then
+    logMessage "installing VenusOS-Tailscale"
+
+    mkdir -p "$BIN_DIR" "$STATE_DIR"
+
+    if [ ! -x "$BIN_DIR/tailscaled" ]; then
+        arch=$(detect_arch)
+        logMessage "architecture: $arch"
+        download_tailscale "$arch"
+        dl_rc=$?
+        if [ $dl_rc -ne 0 ]; then
+            logMessage "ERROR: Tailscale download failed (rc=$dl_rc) — install incomplete"
+            # Do not exit 1 — let SetupHelper continue, service won't start without binary
+        fi
+    else
+        logMessage "Tailscale binaries already present, skipping download"
+    fi
+
+    # Install config (preserve existing)
+    if [ ! -f "$CONF_DST" ]; then
+        cp "$CONF_SRC" "$CONF_DST"
+        logMessage "default config installed ($CONF_DST)"
+    else
+        logMessage "config already exists, preserved ($CONF_DST)"
+    fi
+
+    logMessage "Tailscale install complete"
+fi
+
+# ─── UNINSTALL ───────────────────────────────────────────────────────────────
+
+if [ $scriptAction == 'UNINSTALL' ] ; then
+    logMessage "uninstalling VenusOS-Tailscale"
+
+    if [ -x "$BIN_DIR/tailscale" ]; then
+        "$BIN_DIR/tailscale" logout 2>/dev/null || true
+        logMessage "Tailscale logged out"
+    fi
+
+    rm -rf "$BIN_DIR"
+    rm -rf "$STATE_DIR"
+    logMessage "Tailscale binaries and state removed"
+    logMessage "config preserved ($CONF_DST)"
+fi
+
+# SetupHelper handles runit service install/uninstall
+endScript INSTALL_SERVICES
+
 #### running manually and target just install or uninstall
 if [ $scriptAction == 'NONE' ] ; then
     echo
