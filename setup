@@ -129,6 +129,7 @@ if [ $scriptAction == 'INSTALL' ] ; then
     # Install config (preserve existing)
     if [ ! -f "$CONF_DST" ]; then
         cp "$CONF_SRC" "$CONF_DST"
+        sed -i 's/\r//g' "$CONF_DST"
         logMessage "default config installed ($CONF_DST)"
     else
         logMessage "config already exists, preserved ($CONF_DST)"
@@ -152,6 +153,16 @@ if [ $scriptAction == 'UNINSTALL' ] ; then
     logMessage "Tailscale binaries and state removed"
     logMessage "config preserved ($CONF_DST)"
 fi
+
+# Strip CR from all shipped scripts in case the package was copied from a
+# Windows working tree (CRLF breaks the shebang on BusyBox:
+# "bad interpreter: /bin/sh^M"). Harmless when already LF.
+for f in "$packageDir/tailscale_connect.sh" \
+         "$packageDir/services/tailscaled/run" \
+         "$packageDir/services/tailscaled/finish" \
+         "$packageDir/services/tailscaled/log/run" ; do
+    [ -f "$f" ] && sed -i 's/\r//g' "$f"
+done
 
 # SetupHelper handles runit service install/uninstall
 endScript INSTALL_SERVICES
