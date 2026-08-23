@@ -1,3 +1,10 @@
+v1.1
+- Fix: setup contained two full copies of itself, concatenated. The second copy
+  sat after endScript, so it was dead code - but the two halves had diverged:
+  version detection via python3 vs grep, fallback version 1.80.3 vs 1.78.3, and
+  a failed download aborting with exit 1 vs letting the install continue. Only
+  the first half ever ran; the duplicate is now removed. No behaviour change.
+
 v1.0
 - Initial release
 - Tailscale VPN for Venus OS (RPi3 ARMv7 / RPi5 ARM64)
